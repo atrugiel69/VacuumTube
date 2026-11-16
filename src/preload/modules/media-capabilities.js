@@ -3,6 +3,8 @@
 //the player relies on this to find out what the device supports by checking that sane values are accepted and absurd ones (e.g. framerate=9999) are rejected
 //chromium ignores these parameters and accepts everything, so every one of those checks fails, and the player falls back to assuming no hfr (capping videos at 720p30) and no hdr
 
+const configManager = require('../config')
+
 const checks = {
     width: (value) => Number(value) > 0 && Number(value) <= 7680, //8k width
     height: (value) => Number(value) > 0 && Number(value) <= 4320, //8k height
@@ -15,7 +17,7 @@ const checks = {
 }
 
 function isHdrDisplay() {
-    return window.matchMedia('(dynamic-range: high)').matches;
+    return window.matchMedia('(dynamic-range: high)').matches || !!configManager.get().wayland_hdr;
 }
 
 function isHdrCodec(codec) {

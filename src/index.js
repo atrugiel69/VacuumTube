@@ -241,6 +241,26 @@ async function main() {
     })
 
     //config management on the web side
+    const hdrStatePath = path.join(userData, 'hdr_state')
+    const writeHdrState = (isHdr) => {
+        try {
+            const tmpPath = hdrStatePath + '.tmp'
+            fs.writeFileSync(tmpPath, isHdr ? 'hdr\n' : 'srgb\n')
+            fs.renameSync(tmpPath, hdrStatePath)
+        } catch (err) {
+            console.error('Failed to write hdr_state', err)
+        }
+    }
+    writeHdrState(false)
+
+    electron.ipcMain.on('hdr-state', (event, isHdr) => {
+        writeHdrState(!!isHdr)
+    })
+
+    electron.app.on('before-quit', () => {
+        writeHdrState(false)
+    })
+
     electron.ipcMain.on('get-config', (event) => {
         event.returnValue = config;
     })
