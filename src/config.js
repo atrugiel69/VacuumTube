@@ -39,6 +39,9 @@ const defaults = { //mess
     unlock_resolution: false, //unlock resolution past window resolution
     hardware_decoding: true, //use hardware gpu video decoding
     wayland_hdr: false, //whether or not to enable wayland color management, which allows hdr but sometimes has issues on non-hdr systems
+    wayland_refresh_rate: false, //whether or not to adjust display refresh rate to match video frame rate on wayland
+    wayland_refresh_rate_skip_shorts: true, //whether or not to skip display refresh rate switching when watching YouTube Shorts
+    wayland_refresh_rate_delay: 0, //delay in seconds (0.0-10.0) after refresh rate change before starting playback
     low_memory_mode: false, //enables env_isLimitedMemory
     fullscreen: false, //whether or not to launch in fullscreen, changes automatically if user enters/exits fullscreen
     features_enabled: false, //whether or not VacuumTube extended features are enabled

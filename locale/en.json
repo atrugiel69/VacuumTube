@@ -156,6 +156,18 @@
             "title": "Wayland HDR",
             "description": "Enables HDR when using Wayland, but can cause desaturated colors on unsupported platforms. Relaunch after toggling"
         },
+        "wayland_refresh_rate": {
+            "title": "Adjust Display Refresh Rate",
+            "description": "Adjust screen refresh rate to avoid judder"
+        },
+        "wayland_refresh_rate_skip_shorts": {
+            "title": "Skip for Shorts",
+            "description": "Do not change display refresh rate when watching YouTube Shorts"
+        },
+        "wayland_refresh_rate_delay": {
+            "title": "Delay After Refresh Rate Change",
+            "description": "Pause playback until refresh switch actually happens"
+        },
         "low_memory_mode": {
             "title": "Low Memory Mode",
             "description": "Tells YouTube to enable low memory mode, which may improve performance on slower devices at the cost of some visual effects. Relaunch after toggling"

@@ -242,23 +242,37 @@ async function main() {
 
     //config management on the web side
     const hdrStatePath = path.join(userData, 'hdr_state')
-    const writeHdrState = (isHdr) => {
+    const writeDisplayState = (state = {}) => {
         try {
+            const cm = state.hdr ? 'hdr' : 'srgb';
+            const adjustFps = state.adjustFps !== undefined ? !!state.adjustFps : !!config.wayland_refresh_rate;
+            let payload = cm;
+            if (adjustFps) {
+                const fps = Number(state.fps);
+                const fpsToken = Number.isFinite(fps) && fps >= 10 && fps <= 240
+                    ? String(Number(fps.toFixed(3)))
+                    : 'auto';
+                payload = `${cm} ${fpsToken}`;
+            }
             const tmpPath = hdrStatePath + '.tmp'
-            fs.writeFileSync(tmpPath, isHdr ? 'hdr\n' : 'srgb\n')
+            fs.writeFileSync(tmpPath, `${payload}\n`)
             fs.renameSync(tmpPath, hdrStatePath)
         } catch (err) {
             console.error('Failed to write hdr_state', err)
         }
     }
-    writeHdrState(false)
+    writeDisplayState({ hdr: false, fps: null, adjustFps: !!config.wayland_refresh_rate })
 
-    electron.ipcMain.on('hdr-state', (event, isHdr) => {
-        writeHdrState(!!isHdr)
+    electron.ipcMain.on('hdr-state', (event, payload) => {
+        if (payload && typeof payload === 'object') {
+            writeDisplayState(payload)
+        } else {
+            writeDisplayState({ hdr: !!payload, fps: null, adjustFps: false })
+        }
     })
 
     electron.app.on('before-quit', () => {
-        writeHdrState(false)
+        writeDisplayState({ hdr: false, fps: null, adjustFps: !!config.wayland_refresh_rate })
     })
 
     electron.ipcMain.on('get-config', (event) => {

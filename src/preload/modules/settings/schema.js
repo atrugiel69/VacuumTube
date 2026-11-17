@@ -45,7 +45,23 @@ module.exports = (locale) => [
                     { type: 'toggle', key: 'default_guest_mode' },
                     { type: 'toggle', key: 'screensaver_enabled' },
                     { type: 'choice', key: 'screensaver_timeout', options: [ 1, 2, 5, 10, 15, 30 ], format: formatUnit('minute'), dependsOn: 'screensaver_enabled' },
-                    { type: 'choice', key: 'screensaver_dim_percentage', options: [ 50, 75, 90, 100 ], format: formatUnit('percent', 'short'), dependsOn: 'screensaver_enabled' }
+                    { type: 'choice', key: 'screensaver_dim_percentage', options: [ 50, 75, 90, 100 ], format: formatUnit('percent', 'short'), dependsOn: 'screensaver_enabled' },
+                    { type: 'toggle', key: 'wayland_refresh_rate', hide: process.platform !== 'linux' },
+                    {
+                        type: 'toggle',
+                        key: 'wayland_refresh_rate_skip_shorts',
+                        sub: true,
+                        dependsOn: 'wayland_refresh_rate',
+                        hide: (config) => process.platform !== 'linux' || !config.wayland_refresh_rate
+                    },
+                    {
+                        type: 'choice',
+                        key: 'wayland_refresh_rate_delay',
+                        options: Array.from({ length: 101 }, (_, i) => Number((i * 0.1).toFixed(1))),
+                        format: (value) => `${Number(value).toFixed(1)}s`,
+                        dependsOn: 'wayland_refresh_rate',
+                        hide: process.platform !== 'linux'
+                    }
                 ]
             },
             {

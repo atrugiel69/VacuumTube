@@ -128,6 +128,10 @@ function renderRow(row, context) {
     const node = rowTypes[row.type](row, context)
     const active = (!row.dependsOn || context.config[row.dependsOn]) && !row.disabled;
 
+    if (row.sub) {
+        node.classList.add('vt-row-sub')
+    }
+
     if (!active) {
         node.classList.add('vt-inactive')
         node.vtActivate = null;
@@ -141,12 +145,12 @@ function renderRow(row, context) {
 }
 
 //removes hidden rows and falsy entries, so pages can use `condition && row`
-function visibleRows(rows) { 
-    return (rows || []).filter((row) => row && !row.hide);
+function visibleRows(rows, context) {
+    return (rows || []).filter((row) => row && !resolve(row.hide, context?.config));
 }
 
 function card(rows, context) {
-    return el('div', { className: 'vt-card' }, visibleRows(rows).flatMap((row) => renderRow(row, context)));
+    return el('div', { className: 'vt-card' }, visibleRows(rows, context).flatMap((row) => renderRow(row, context)));
 }
 
 function viewHeader({ title, description, count, badge, icon }) {
@@ -161,8 +165,8 @@ function viewHeader({ title, description, count, badge, icon }) {
     ]);
 }
 
-function countFocusable(rows) {
-    return visibleRows(rows).filter((row) => [ 'toggle', 'choice', 'link', 'button' ].includes(row.type)).length;
+function countFocusable(rows, context) {
+    return visibleRows(rows, context).filter((row) => [ 'toggle', 'choice', 'link', 'button' ].includes(row.type)).length;
 }
 
 //shown under every category if the language file is missing strings
@@ -176,8 +180,8 @@ function translateLink(context) {
 }
 
 function renderCategory(category, context) {
-    const sections = category.sections.filter((section) => !section.hide && visibleRows(section.rows).length)
-    const count = sections.reduce((n, section) => n + countFocusable(section.rows), 0)
+    const sections = category.sections.filter((section) => !resolve(section.hide, context.config) && visibleRows(section.rows, context).length)
+    const count = sections.reduce((n, section) => n + countFocusable(section.rows, context), 0)
     const meta = context.locale.categories[category.id] || {}
 
     return el('div', { className: 'vt-view' }, [
@@ -212,7 +216,7 @@ function renderPage(page, sections, parentTitle, context) {
             badge: resolve(page.badge, context.locale),
             icon: page.icon
         }),
-        ...sections.filter((section) => section && visibleRows(section.rows).length).map((section) =>
+        ...sections.filter((section) => section && visibleRows(section.rows, context).length).map((section) =>
             el('section', { className: 'vt-section' }, [
                 section.title ? el('h3', { className: 'vt-section-title', textContent: section.title }) : null,
                 card(section.rows, context)
