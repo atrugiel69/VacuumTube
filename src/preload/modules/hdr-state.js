@@ -1,9 +1,12 @@
 const { ipcRenderer } = require('electron')
 const configManager = require('../config')
 const jsonMod = require('../util/jsonModifiers')
+const rcMod = require('../util/resolveCommandModifiers')
 
 const STANDARD_RATES = [ 23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60, 100, 119.88, 120 ]
 const itagFpsMap = new Map()
+const knownShortIds = new Set()
+let pendingShortId = null
 
 function canonicalFps(raw) {
     const val = Number(raw)
@@ -65,19 +68,21 @@ function isShortsPlayback() {
 }
 
 function getPlaybackContext() {
-    const isShort = isShortsPlayback()
+    const domIsShort = isShortsPlayback()
     try {
         const url = new URL(location.hash.substring(1), location.href)
         if (url.pathname === '/watch') {
-            return { videoId: url.searchParams.get('v') || '__watch__', isShort };
+            const vid = url.searchParams.get('v') || '';
+            const isShort = domIsShort || (vid ? knownShortIds.has(vid) : pendingShortId !== null);
+            return { videoId: vid || '__watch__', isShort };
         }
-        if (isShort) {
+        if (domIsShort) {
             const parts = url.pathname.split('/').filter(Boolean)
             const shortId = parts[0] === 'shorts' && parts[1] ? parts[1] : '__shorts__';
             return { videoId: shortId, isShort: true };
         }
     } catch {}
-    if (isShort) {
+    if (domIsShort) {
         return { videoId: '__shorts__', isShort: true };
     }
     return null;
@@ -279,6 +284,18 @@ function isAdPlaying(player) {
 }
 
 module.exports = () => {
+    rcMod.addInputModifier((c) => {
+        if (c?.reelWatchEndpoint?.videoId) {
+            const sid = String(c.reelWatchEndpoint.videoId)
+            knownShortIds.add(sid)
+            pendingShortId = sid;
+        } else if (c?.watchEndpoint?.videoId) {
+            knownShortIds.delete(String(c.watchEndpoint.videoId))
+            pendingShortId = null;
+        }
+        return c;
+    })
+
     jsonMod.addModifier((json) => {
         recordAdaptiveFormats(json)
         return json;
