@@ -24,17 +24,16 @@ function canonicalFps(raw) {
 }
 
 function recordAdaptiveFormats(json) {
-    const lists = [
-        json?.streamingData?.adaptiveFormats,
-        json?.playerResponse?.streamingData?.adaptiveFormats
-    ]
-    for (const formats of lists) {
+    const responses = [ json, json?.playerResponse ].filter(Boolean)
+    for (const resp of responses) {
+        const vid = resp?.videoDetails?.videoId || '';
+        const formats = resp?.streamingData?.adaptiveFormats;
         if (!Array.isArray(formats)) continue;
         for (const f of formats) {
             const itag = Number(f?.itag)
             const fps = canonicalFps(f?.fps)
             if (itag > 0 && fps !== null) {
-                itagFpsMap.set(itag, fps)
+                itagFpsMap.set(`${vid}:${itag}`, fps)
             }
         }
     }
@@ -47,13 +46,10 @@ function isHdrCodec(codec) {
 }
 
 function isHdrMimeType(type) {
-    let params = String(type).split(';').slice(1)
-    for (let param of params) {
-        let [ key, ...rest ] = param.split('=')
-        if (key.trim().toLowerCase() === 'codecs') {
-            let value = rest.join('=').trim().replace(/^"|"$/g, '')
-            return value.split(',').some(c => isHdrCodec(c.trim()));
-        }
+    let match = type.match(/codecs="([^"]+)"/i)
+    if (!match) return false;
+    for (let codec of match[1].split(',')) {
+        if (isHdrCodec(codec.trim())) return true;
     }
     return false;
 }
@@ -248,17 +244,27 @@ function parseWebmFps(bytes) {
     return null;
 }
 
-function getMetadataFps(player) {
+function getMetadataFps(player, videoId) {
     try {
         const stats = player?.getVideoStats?.()
         const fmt = Number(stats?.fmt)
-        if (fmt > 0 && itagFpsMap.has(fmt)) {
-            return itagFpsMap.get(fmt);
-        }
-        const formats = player?.getPlayerResponse?.()?.streamingData?.adaptiveFormats
-        if (fmt > 0 && Array.isArray(formats)) {
-            const match = formats.find((f) => Number(f.itag) === fmt && Number(f.fps) > 0)
-            if (match) return canonicalFps(Number(match.fps));
+        const resp = player?.getPlayerResponse?.()
+        const respVid = resp?.videoDetails?.videoId || videoId || '';
+        if (fmt > 0) {
+            if (respVid && itagFpsMap.has(`${respVid}:${fmt}`)) {
+                return itagFpsMap.get(`${respVid}:${fmt}`);
+            }
+            if (videoId && itagFpsMap.has(`${videoId}:${fmt}`)) {
+                return itagFpsMap.get(`${videoId}:${fmt}`);
+            }
+            const formats = resp?.streamingData?.adaptiveFormats;
+            if (Array.isArray(formats)) {
+                const match = formats.find((f) => Number(f.itag) === fmt && Number(f.fps) > 0)
+                if (match) return canonicalFps(Number(match.fps));
+            }
+            if (itagFpsMap.has(`:${fmt}`)) {
+                return itagFpsMap.get(`:${fmt}`);
+            }
         }
     } catch {}
     return null;
@@ -280,7 +286,6 @@ module.exports = () => {
 
     let streamIsHdr = false;
     let containerFps = null;
-    let measuredFps = null;
     let lastPayloadKey = null;
 
     let appliedFpsForSession = null;
@@ -352,47 +357,6 @@ module.exports = () => {
         ipcRenderer.send('hdr-state', { hdr: !!hdr, fps: normalizedFps, adjustFps })
     }
 
-    let probeGeneration = 0;
-    let probedKey = null;
-
-    function attachFrameRateProbe(video, videoId) {
-        if (!video || typeof video.requestVideoFrameCallback !== 'function') return;
-        const key = `${videoId}|${video.currentSrc}`;
-        if (key === probedKey) return;
-        probedKey = key;
-
-        const gen = ++probeGeneration;
-        let startMediaTime = null;
-        let frames = 0;
-
-        const onFrame = (now, metadata) => {
-            if (gen !== probeGeneration || !video.isConnected) return;
-            if (containerFps !== null && measuredFps !== null) return;
-
-            if (!video.paused && !video.ended && metadata && typeof metadata.mediaTime === 'number') {
-                if (startMediaTime === null || metadata.mediaTime < startMediaTime) {
-                    startMediaTime = metadata.mediaTime;
-                    frames = 0;
-                } else {
-                    frames++;
-                    const elapsed = metadata.mediaTime - startMediaTime;
-                    if (frames >= 12 && elapsed >= 0.2) {
-                        const detected = canonicalFps(frames / elapsed)
-                        if (detected !== null) {
-                            measuredFps = detected;
-                            evaluate()
-                            return;
-                        }
-                    }
-                }
-            }
-
-            video.requestVideoFrameCallback(onFrame)
-        };
-
-        video.requestVideoFrameCallback(onFrame)
-    }
-
     function evaluate() {
         const cfg = configManager.get()
         const playback = getPlaybackContext()
@@ -405,8 +369,6 @@ module.exports = () => {
             clearHold(false)
             streamIsHdr = false;
             containerFps = null;
-            measuredFps = null;
-            probedKey = null;
             appliedVideoId = null;
             appliedFpsForSession = null;
             report(false, null)
@@ -435,12 +397,7 @@ module.exports = () => {
             }
         }
 
-        const metaFps = getMetadataFps(player)
-        if (containerFps === null && measuredFps === null) {
-            attachFrameRateProbe(video, videoId)
-        }
-
-        const effectiveFps = containerFps ?? measuredFps ?? metaFps;
+        const effectiveFps = containerFps ?? getMetadataFps(player, videoId);
 
         if (adjustFps && effectiveFps !== null) {
             const needsModeSwitch = effectiveFps !== appliedFpsForSession;
@@ -516,8 +473,6 @@ module.exports = () => {
                     this._vtMp4State = null;
                     streamIsHdr = isHdrMimeType(type)
                     containerFps = null;
-                    measuredFps = null;
-                    probedKey = null;
                     queueMicrotask(evaluate)
                 }
                 return origChangeType.call(this, type);
@@ -538,8 +493,6 @@ module.exports = () => {
                 sb._vtMp4State = null;
                 streamIsHdr = isHdrMimeType(type)
                 containerFps = null;
-                measuredFps = null;
-                probedKey = null;
                 queueMicrotask(evaluate)
             }
             return sb;
@@ -552,8 +505,6 @@ module.exports = () => {
 
     window.addEventListener('hashchange', () => {
         containerFps = null;
-        measuredFps = null;
-        probedKey = null;
         evaluate()
     }, true)
 
@@ -561,8 +512,6 @@ module.exports = () => {
         clearHold(false)
         streamIsHdr = false;
         containerFps = null;
-        measuredFps = null;
-        probedKey = null;
         evaluate()
     }, true)
 
