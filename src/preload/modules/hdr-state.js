@@ -450,7 +450,7 @@ module.exports = () => {
             }
         }
 
-        report(streamIsHdr, effectiveFps)
+        report(streamIsHdr, adjustFps ? effectiveFps : null)
     }
 
     function hookSourceBuffer() {
